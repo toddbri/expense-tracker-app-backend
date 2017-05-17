@@ -24,6 +24,16 @@ app.post('/api/user/signup', (req,resp,next) => {
   let user = req.body;
   let password = req.body.password;
 
+  let DEFAULT_SUBCATEGORIES = { 1: ['Groceries', 'Restaurants'],
+                                2: ['Electric', 'Gas', 'Water'],
+                                3: ['Rent', 'HOA Dues'],
+                                4: ['Charitable','Church'],
+                                5: ['Gasoline', 'Repairs'],
+                                6: ['Homeowners','Taxes', 'Medical'],
+                                7: ['Mortgage','Automobile','Student']
+                              };
+
+
   bcrypt.hash(password, 10)
   .then(encryptedPassword =>  {
 
@@ -38,10 +48,26 @@ app.post('/api/user/signup', (req,resp,next) => {
       let token = uuid.v4();
       console.log('user_id: ', results.id);
       console.log("token is: ", token);
-      return db.one(`insert into tokens (userid, token) VALUES ($1, $2) returning token`, [results.id, token]);
+      return Promise.all([results.id, db.one(`insert into tokens (userid, token) VALUES ($1, $2) returning token`, [results.id, token])]);
 
   })
-  .then(results => resp.json({token: results.token}))
+  .then(([id, results]) => {
+    resp.json({token: results.token});
+    return id;
+  })
+  .then((id) => {
+    let arrPromises = [];
+    Object.keys(DEFAULT_SUBCATEGORIES).forEach(key => {
+        DEFAULT_SUBCATEGORIES[key].forEach( subcategory => {
+          arrPromises.push(db.any(`insert into subcategories (id, userid, category, subcategory, amount)
+                                  VALUES (default, $1, $2, $3, $4)`, [id, key, subcategory, 0]));
+        });
+
+      });
+
+    return Promise.all(arrPromises);
+
+    })
   .catch(err => {
        if (err.message === 'duplicate key value violates unique constraint "users_email_key"'){
          resp.status(409);
