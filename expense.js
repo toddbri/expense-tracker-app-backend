@@ -13,6 +13,106 @@ app.use(bodyParser.json());
 app.use(cors());
 app.use('/', express.static(__dirname + '/public'));
 
+//====================================================//
+//                                                    //
+//        API for user to create a new account        //
+//                                                    //
+// ===================================================//
+
+app.post('/api/user/signup', (req,resp,next) => {
+  //sign up needs to be sent an object {email, firstName, lastName, password}. It will return the users authentication token.
+  let user = req.body;
+  let password = req.body.password;
+
+  bcrypt.hash(password, 10)
+  .then(encryptedPassword =>  {
+
+    console.log('creating user: ', user);
+    return db.one(`insert into users (id, firstname, lastname, email, password)
+                  values (default, $1, $2, $3, $4) returning id`,
+                  [user.firstName, user.lastName, user.email, encryptedPassword]);
+    }
+
+  )
+  .then(results => {
+      let token = uuid.v4();
+      console.log('user_id: ', results.id);
+      console.log("token is: ", token);
+      return db.one(`insert into tokens (userid, token) VALUES ($1, $2) returning token`, [results.id, token]);
+
+  })
+  .then(results => resp.json({token: results.token}))
+  .catch(err => {
+       if (err.message === 'duplicate key value violates unique constraint "users_email_key"'){
+         resp.status(409);
+         resp.json({message: 'email already exists'});
+       } else {
+         console.log("unknown error: ", err);
+         throw err;
+       }
+
+  })
+
+  .catch(next);
+
+});
+
+//====================================================//
+//                                                    //
+//        API for user to login                       //
+//                                                    //
+// ===================================================//
+
+
+// this api needs an object passed with {email, password}
+
+app.post('/api/user/login', (req, resp, next) => {
+  let password = req.body.password;
+
+  db.one(`select id, password as encryptedpassword, email, firstname, lastname  FROM users WHERE email ilike $1`, req.body.email)
+  .then(results => {
+    console.log("results: ", results);
+    return Promise.all([results, bcrypt.compare(password, results.encryptedpassword)])
+    })
+  .then(([results, matched]) => {
+
+    if (matched) {
+      let token = uuid.v4();
+      let loginData = {firstName: results.firstname, lastName: results.lastname, token: token, email: results.email };
+       return Promise.all([loginData, db.none(`insert into tokens (userid, token) VALUES ($1, $2)`, [results.id, token])]);
+
+    } else if (!matched){
+      let errMessage = {message: 'password is incorrect'};
+      throw errMessage;
+    }
+
+  })
+  .then(([loginData, results ]) => resp.json(loginData))
+  .catch(err => {
+    console.log('handing error during login: ', err);
+    if (err.message === 'No data returned from the query.') {
+      let errMessage = {message: 'login failed'};
+      resp.status(401);
+      resp.json(errMessage);
+    } else if (err.message === 'password is incorrect') {
+      let errMessage = {message: 'login failed'};
+      resp.status(401);
+      resp.json(errMessage);
+    } else {
+      console.log("something bad happened");
+      throw err;
+     }
+  })
+  .catch(next);
+});
+
+
+//====================================================//
+//                                                    //
+//    API for user to retrieve home page expenses     //
+//                                                    //
+// ===================================================//
+
 app.post('/api/expenses', (req, resp, next) => {
 
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
