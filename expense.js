@@ -116,7 +116,7 @@ app.post('/api/user/login', (req, resp, next) => {
   .then(([loginData, results ]) => resp.json(loginData)) // the password is correct, return the user information
   .catch(err => {
     console.log('handing error during login: ', err);
-    if (err.message === 'No data returned from the query.') {
+    if (err.message === 'No data returned from the query.') { //this is typically when the email address was not found
       let errMessage = {message: 'login failed'};
       resp.status(401);
       resp.json(errMessage);
