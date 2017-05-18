@@ -34,28 +34,28 @@ app.post('/api/user/signup', (req,resp,next) => {
                               };
 
 
-  bcrypt.hash(password, 10)
+  bcrypt.hash(password, 10) //create has with 10 passes
   .then(encryptedPassword =>  {
 
     console.log('creating user: ', user);
     return db.one(`insert into users (id, firstname, lastname, email, password)
                   values (default, $1, $2, $3, $4) returning id`,
-                  [user.firstName, user.lastName, user.email, encryptedPassword]);
+                  [user.firstName, user.lastName, user.email, encryptedPassword]); //add the user information for the new user and return the id
     }
 
   )
-  .then(results => {
+  .then(results => { //create an auth token for the new user and add to the tokens table
       let token = uuid.v4();
       console.log('user_id: ', results.id);
       console.log("token is: ", token);
       return Promise.all([results.id, db.one(`insert into tokens (userid, token) VALUES ($1, $2) returning token`, [results.id, token])]);
 
   })
-  .then(([id, results]) => {
+  .then(([id, results]) => { //respond to the POST request with the auth token
     resp.json({token: results.token});
     return id;
   })
-  .then((id) => {
+  .then((id) => { //add the default subcategories for the new user
     let arrPromises = [];
     Object.keys(DEFAULT_SUBCATEGORIES).forEach(key => {
         DEFAULT_SUBCATEGORIES[key].forEach( subcategory => {
@@ -95,10 +95,10 @@ app.post('/api/user/signup', (req,resp,next) => {
 app.post('/api/user/login', (req, resp, next) => {
   let password = req.body.password;
 
-  db.one(`select id, password as encryptedpassword, email, firstname, lastname  FROM users WHERE email ilike $1`, req.body.email)
+  db.one(`select id, password as encryptedpassword, email, firstname, lastname  FROM users WHERE email ilike $1`, req.body.email) //return one user with matching email
   .then(results => {
     console.log("results: ", results);
-    return Promise.all([results, bcrypt.compare(password, results.encryptedpassword)])
+    return Promise.all([results, bcrypt.compare(password, results.encryptedpassword)]) // compare the supplied password and the encrypted password
     })
   .then(([results, matched]) => {
 
@@ -113,7 +113,7 @@ app.post('/api/user/login', (req, resp, next) => {
     }
 
   })
-  .then(([loginData, results ]) => resp.json(loginData))
+  .then(([loginData, results ]) => resp.json(loginData)) // the password is correct, return the user information
   .catch(err => {
     console.log('handing error during login: ', err);
     if (err.message === 'No data returned from the query.') {
