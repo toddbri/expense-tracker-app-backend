@@ -40,7 +40,7 @@ app.post('/api/user/signup', (req,resp,next) => {
     console.log('creating user: ', user);
     return db.one(`insert into users (id, firstname, lastname, email, password)
                   values (default, $1, $2, $3, $4) returning id`,
-                  [user.firstName, user.lastName, user.email, encryptedPassword]); //add the user information for the new user and return the id
+                  [user.firstName, user.lastName, user.email.toLowerCase(), encryptedPassword]); //add the user information for the new user and return the id
     }
 
   )
@@ -93,8 +93,10 @@ app.post('/api/user/signup', (req,resp,next) => {
 // this api needs an object passed with {email, password}
 
 app.post('/api/user/login', (req, resp, next) => {
+  var x = 0;
+  while (x< 150000){x+=1;console.log(x);}
   let password = req.body.password;
-
+  console.log('req-body: ', req.body);
   db.one(`select id, password as encryptedpassword, email, firstname, lastname  FROM users WHERE email ilike $1`, req.body.email) //return one user with matching email
   .then(results => {
     console.log("results: ", results);
@@ -140,7 +142,8 @@ app.post('/api/user/login', (req, resp, next) => {
 // ===================================================//
 
 app.post('/api/expenses', (req, resp, next) => {
-
+  console.log("I see the request");
+  console.log("req: ", req.body);
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
   .then(objId => {
 
