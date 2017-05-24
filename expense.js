@@ -93,8 +93,7 @@ app.post('/api/user/signup', (req,resp,next) => {
 // this api needs an object passed with {email, password}
 
 app.post('/api/user/login', (req, resp, next) => {
-  var x = 0;
-  while (x< 150000){x+=1;console.log(x);}
+
   let password = req.body.password;
   console.log('req-body: ', req.body);
   db.one(`select id, password as encryptedpassword, email, firstname, lastname  FROM users WHERE email ilike $1`, req.body.email) //return one user with matching email
@@ -287,6 +286,172 @@ app.post('/api/expenses', (req, resp, next) => {
   .catch(next);
 });
 
+//====================================================//
+//                      Version 2                     //
+//    API for user to retrieve home page expenses     //
+//                                                    //
+// ===================================================//
+
+app.post('/api/expenses2', (req, resp, next) => {
+  console.log("I see the request");
+  console.log("req: ", req.body);
+  db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
+  .then(objId => {
+
+    return Promise.all([objId.userid, db.any('select id, category from categories')]);
+  })
+  .then(([userid, objCategories]) => {  // takes in the userid and an object with all the main categories. Creates a blank Data object with categories and their ids
+
+      let objData = [];
+      objCategories.forEach(item => {
+        let objCategory = {};
+        objCategory[item.category]={};  //create a blank object for each category.
+        objCategory[item.category]['id']=item.id;   // sets the id for that category.
+        objCategory[item.category]['monthlyBudget']=0; // sets the monthly budget for that category to 0.
+        objCategory[item.category]['spent']=0;  // sets the spent amount to 0.
+        objCategory[item.category]['subcategories']=[]; //creates a blank object for the subcategories value for this category.
+        objData.push(objCategory);
+        });
+        // console.log('objData: ', objData);
+        // console.log("------------");
+        let nextQuery = db.any(`select categories.id as catid, subcategories.id as subid, subcategories.subcategory, amount
+                                from subcategories join categories on subcategories.category = categories.id
+                                where userid = $1`, [userid]);
+
+        return Promise.all([userid, objData, nextQuery]);
+  })
+  .then(([userid, objData, results]) => {  // Takes in the userid, Data object, and results from the last query. Updates the Data object to include all subcategories for
+                                          // this user with the subcategory id and monthlyBudget allocation.
+
+    results.forEach(itemA => {
+     objData.forEach( ( objCategory, index ) => {
+      //  console.log('objCategory: ', objCategory);
+       let category = Object.keys(objCategory)[0];
+      //  console.log('category: ', category);
+       if (objCategory[category].id === itemA.catid){
+        //  console.log('test: ', objData[category]);
+           objData[index][category].subcategories.push({[itemA.subcategory]: {id: itemA.subid, monthlyBudget: itemA.amount, spent: 0}});
+         }
+       })
+    });
+
+    // console.log('step2: ', JSON.stringify(objData));
+    // console.log('++++++++++++++++++++');
+    return Promise.all([userid, objData]);
+
+  })
+  .then(([userid, objData]) => { // Takes in the userid and Data object. Generates a DB query of the monthly budget for each category.
+      let nextQuery = db.any('select category, coalesce(sum(amount),0) as amount from subcategories where userid = $1 group by category', [userid]);
+      return Promise.all([userid, objData, nextQuery]);
+  })
+  .then(([userid, objData, results]) => { // Takes in the userid, Data object, and results from last query.
+                                          // Updates the Data object with the monthly budget allotment for each category
+
+       results.forEach(itemA => {
+        //  console.log('itemA: ', itemA);
+        //  console.log('itemA category: ', itemA.category);
+        objData.forEach( (objCategory, index) => {
+
+          let category = Object.keys(objCategory)[0];
+          // console.log('objCategory.id: ', objCategory[category].id);
+          if (objCategory[category].id === itemA.category){
+              objData[index][category].monthlyBudget = itemA.amount;
+            }
+        })
+      });
+      // console.log('step3: ', JSON.stringify(objData));
+      // console.log('====================');
+      let nextQuery ='';
+      if (req.body.timeFrame === 'thismonth') {
+
+            nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
+                                from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
+                                join categories on subcategories.category= categories.id
+                                where users.id = $1 and date > date_trunc('month', current_date) group by categories.id`, [userid]);
+
+      } else if (req.body.timeFrame === 'prior30days') {
+
+            nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
+                                from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
+                                join categories on subcategories.category= categories.id
+                                where users.id = $1 and (current_date - date) < 30 group by categories.id`, [userid]);
+
+      }
+      return Promise.all([userid, objData, nextQuery]);
+
+  })
+  .then(([userid, objData, results]) => {
+
+    results.forEach(itemA => {
+
+        objData.forEach((objCategory, index) => {
+            let category = Object.keys(objCategory)[0];
+            if (objCategory[category].id  === itemA.catid){
+              objData[index][category].spent = itemA.amount;
+            }
+          });
+        })
+
+    console.log("step4: ", JSON.stringify(objData));
+    console.log("\\\\\\\\\\\\\\\\\\\\");
+
+    let nextQuery ='';
+    if (req.body.timeFrame === 'thismonth') {
+
+          nextQuery = db.any(`select subcategories.id as subcatid, coalesce(sum(expenses.amount),0) as amount
+                              from expenses left join users on expenses.userid = users.id
+                              join subcategories on expenses.subcategory = subcategories.id
+                              where users.id = $1 and date > date_trunc('month', current_date) group by subcategories.id`, [userid]);
+
+
+    } else if (req.body.timeFrame === 'prior30days') {
+
+          nextQuery = db.any(`select subcategories.id as subcatid, coalesce(sum(expenses.amount),0) as amount
+                              from expenses left join users on expenses.userid = users.id
+                              join subcategories on expenses.subcategory = subcategories.id
+                              where users.id = $1 and (current_date - date) < 30 group by subcategories.id`, [userid]);
+
+    }
+
+    return Promise.all([userid, objData, nextQuery]);
+
+  })
+  .then(([userid, objData, results]) => {
+
+    results.forEach(itemA => {
+        // console.log("============================");
+        // console.log('itemA: ',itemA);
+        objData.forEach((objCategory, index1) => {
+            console.log('\tobjCategory: ', objCategory);
+            let category = Object.keys(objCategory)[0];
+            console.log('\t\tsubCats: ', objCategory[category].subcategories);
+            objCategory[category].subcategories.forEach( (objSubcategory, index2 ) => {
+              let subCategory = Object.keys(objSubcategory)[0];
+              // console.log('\t\tsubcategory: ', objData[category].subcategories[subcategory]);
+            if (objData[index1][category].subcategories[index2][subCategory].id === itemA.subcatid){
+              // console.log('\t\t\tfound a match');
+              objData[index1][category].subcategories[index2][subCategory].spent = itemA.amount;
+            }
+          })
+        })
+    })
+
+    return objData;
+
+  })
+  .then((val) => resp.json(val))
+  .catch( err => {
+      console.log('error message: ', err);
+      if (err.message = 'No data returned from the query.'){
+        let errMessage = {message: 'user not authenticated'};
+        resp.status(401);
+        resp.json(errMessage);
+      } else {
+        throw err;
+      }
+  })
+  .catch(next);
+});
 
 
 
