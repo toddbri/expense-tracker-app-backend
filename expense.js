@@ -37,7 +37,7 @@ app.post('/api/user/signup', (req,resp,next) => {
   bcrypt.hash(password, 10) //create has with 10 passes
   .then(encryptedPassword =>  {
 
-    console.log('creating user: ', user);
+    // console.log('creating user: ', user);
     return db.one(`insert into users (id, firstname, lastname, email, password)
                   values (default, $1, $2, $3, $4) returning id`,
                   [user.firstName, user.lastName, user.email.toLowerCase(), encryptedPassword]); //add the user information for the new user and return the id
@@ -46,8 +46,8 @@ app.post('/api/user/signup', (req,resp,next) => {
   )
   .then(results => { //create an auth token for the new user and add to the tokens table
       let token = uuid.v4();
-      console.log('user_id: ', results.id);
-      console.log("token is: ", token);
+      // console.log('user_id: ', results.id);
+      // console.log("token is: ", token);
       return Promise.all([results.id, db.one(`insert into tokens (userid, token) VALUES ($1, $2) returning token`, [results.id, token])]);
 
   })
@@ -95,14 +95,14 @@ app.post('/api/user/signup', (req,resp,next) => {
 app.post('/api/user/login', (req, resp, next) => {
 
   let password = req.body.password;
-  console.log('req-body: ', req.body);
+  // console.log('req-body: ', req.body);
   db.one(`select id, password as encryptedpassword, email, firstname, lastname  FROM users WHERE email ilike $1`, req.body.email) //return one user with matching email
   .then(results => {
-    console.log("results: ", results);
+    // console.log("results: ", results);
     return Promise.all([results, bcrypt.compare(password, results.encryptedpassword)]) // compare the supplied password and the encrypted password
     })
   .then(([results, matched]) => {
-
+    // console.log('matched: ', matched);
     if (matched) {
       let token = uuid.v4();
       let loginData = {firstName: results.firstname, lastName: results.lastname, token: token, email: results.email };
@@ -142,7 +142,7 @@ app.post('/api/user/login', (req, resp, next) => {
 
 app.post('/api/expenses', (req, resp, next) => {
   // console.log("I see the request");
-  console.log("req: ", req.body);
+  // console.log("req: ", req.body);
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
   .then(objId => {
 
@@ -509,12 +509,7 @@ app.post('/api/saveexpenses', (req, resp, next) => {
         let subcategoryName = Object.keys(objSubcategory)[0];
         let amount = objSubcategory[subcategoryName].monthlyBudget;
         let category = tmpcategory[categoryName].id;
-        //
-        // console.log('here goes the update');
-        // console.log('userid: ', userid);
-        // console.log('amount: ', amount);
-        // console.log('category: ', category);
-        // console.log('subcategory: ', subcategoryName);
+
         arrSQLUpdatePromises.push(db.any('update subcategories set amount = $1 where userid = $2 and category = $3 and subcategory = $4', [amount, userid, category, subcategoryName]));
       });
 
@@ -535,6 +530,37 @@ app.post('/api/saveexpenses', (req, resp, next) => {
   .catch(next);
 });
 
+//====================================================//
+//                                                    //
+//    API for retrieving subcategory transactions     //
+//                                                    //
+// ===================================================//
+
+app.post('/api/subcategorytransactions', (req, resp, next) => {
+  // console.log("req: ", req.body);
+  db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
+  .then(objId => {
+
+      let userid = objId.userid;
+      let subcategoryname = req.body.subcategoryname;
+      let subcategoryid = req.body.subcategoryid;
+
+      return db.any(`select * from expenses where userid = $1 and subcategory = $2 and date > date_trunc('month', current_date) `, [userid, subcategoryid, ] );
+
+  })
+  .then((results) => resp.json(results))
+  .catch( err => {
+      console.log('error message: ', err);
+      if (err.message = 'No data returned from the query.'){
+        let errMessage = {message: 'user not authenticated'};
+        resp.status(401);
+        resp.json(errMessage);
+      } else {
+        throw err;
+      }
+  })
+  .catch(next);
+});
 
 app.use((err, req, resp, next) => {
   console.log("error: ", err.message);
