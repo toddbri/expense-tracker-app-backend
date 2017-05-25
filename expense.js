@@ -485,6 +485,41 @@ app.post('/api/addnewsubcategory', (req, resp, next) => {
   .catch(next);
 });
 
+
+//====================================================//
+//                                                    //
+//    API for user to add a new transaction           //
+//                                                    //
+// ===================================================//
+
+app.post('/api/addnewtransaction', (req, resp, next) => {
+  db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
+  .then(objId => {
+    let userid = objId.userid;
+    let subcategoryid = req.body.subcategoryid;
+    let amount = req.body.amount;
+    let description = req.body.description;
+    let address = req.body.address;
+    let date = req.body.date;
+    let type = req.body.type;
+
+    return db.any('insert into expenses (id, amount, subcategory, userid, description, address, date, type ) values (default, $1, $2, $3, $4, $5, $6, $7)',
+                  [amount, subcategoryid, userid, description, address, date, type]);
+  })
+  .then(() => resp.json({message: 'new transaction created'}))
+  .catch( err => {
+      console.log('error message: ', err);
+      if (err.message = 'No data returned from the query.'){
+        let errMessage = {message: 'user not authenticated'};
+        resp.status(401);
+        resp.json(errMessage);
+      } else {
+        throw err;
+      }
+  })
+  .catch(next);
+});
+
 //====================================================//
 //                                                    //
 //    API for save monthly expense budget settings    //
