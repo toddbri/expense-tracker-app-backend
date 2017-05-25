@@ -141,7 +141,7 @@ app.post('/api/user/login', (req, resp, next) => {
 // ===================================================//
 
 app.post('/api/expenses', (req, resp, next) => {
-  console.log("I see the request");
+  // console.log("I see the request");
   console.log("req: ", req.body);
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
   .then(objId => {
@@ -293,8 +293,8 @@ app.post('/api/expenses', (req, resp, next) => {
 // ===================================================//
 
 app.post('/api/expenses2', (req, resp, next) => {
-  console.log("I see the request");
-  console.log("req: ", req.body);
+  // console.log("I see the request");
+  // console.log("req: ", req.body);
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
   .then(objId => {
 
@@ -392,8 +392,8 @@ app.post('/api/expenses2', (req, resp, next) => {
           });
         })
 
-    console.log("step4: ", JSON.stringify(objData));
-    console.log("\\\\\\\\\\\\\\\\\\\\");
+    // console.log("step4: ", JSON.stringify(objData));
+    // console.log("\\\\\\\\\\\\\\\\\\\\");
 
     let nextQuery ='';
     if (req.body.timeFrame === 'thismonth') {
@@ -422,9 +422,9 @@ app.post('/api/expenses2', (req, resp, next) => {
         // console.log("============================");
         // console.log('itemA: ',itemA);
         objData.forEach((objCategory, index1) => {
-            console.log('\tobjCategory: ', objCategory);
+            // console.log('\tobjCategory: ', objCategory);
             let category = Object.keys(objCategory)[0];
-            console.log('\t\tsubCats: ', objCategory[category].subcategories);
+            // console.log('\t\tsubCats: ', objCategory[category].subcategories);
             objCategory[category].subcategories.forEach( (objSubcategory, index2 ) => {
               let subCategory = Object.keys(objSubcategory)[0];
               // console.log('\t\tsubcategory: ', objData[category].subcategories[subcategory]);
@@ -453,6 +453,87 @@ app.post('/api/expenses2', (req, resp, next) => {
   .catch(next);
 });
 
+//====================================================//
+//                                                    //
+//    API for user to add a new subcategory           //
+//                                                    //
+// ===================================================//
+
+app.post('/api/addnewsubcategory', (req, resp, next) => {
+  db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
+  .then(objId => {
+    return Promise.all([objId, db.one('select id as categoryid from categories where category = $1', [req.body.categoryName])]);
+  })
+  .then(([objId, results]) => {
+    let categoryid = results.categoryid;
+    let subcategory = req.body.subcategory;
+    let amount = req.body.amount;
+
+    return Promise.all([objId.userid, db.any('insert into subcategories (id, userid, category, subcategory, amount) values (default, $1, $2, $3, $4)',[objId.userid, categoryid, subcategory, amount])]);
+  })
+  .then(() => resp.json({message: 'new category created'}))
+  .catch( err => {
+      console.log('error message: ', err);
+      if (err.message = 'No data returned from the query.'){
+        let errMessage = {message: 'user not authenticated'};
+        resp.status(401);
+        resp.json(errMessage);
+      } else {
+        throw err;
+      }
+  })
+  .catch(next);
+});
+
+//====================================================//
+//                                                    //
+//    API for save monthly expense budget settings    //
+//                                                    //
+// ===================================================//
+
+app.post('/api/saveexpenses', (req, resp, next) => {
+  // console.log("req: ", req.body);
+  db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
+  .then(objId => {
+    let arrSQLUpdatePromises = [];
+    let expenses = req.body.expenses;
+    // console.log("expenses: ", expenses);
+    expenses.forEach(category => {
+      let categoryName = Object.keys(category)[0];
+      let tmpcategory = category;
+      // console.log("processing category: ", categoryName);
+      // console.log("category: ", category);
+      category[categoryName].subcategories.forEach(objSubcategory => {
+        // console.log("objSubcategory: ", objSubcategory);
+        let userid = objId.userid;
+        let subcategoryName = Object.keys(objSubcategory)[0];
+        let amount = objSubcategory[subcategoryName].monthlyBudget;
+        let category = tmpcategory[categoryName].id;
+        //
+        // console.log('here goes the update');
+        // console.log('userid: ', userid);
+        // console.log('amount: ', amount);
+        // console.log('category: ', category);
+        // console.log('subcategory: ', subcategoryName);
+        arrSQLUpdatePromises.push(db.any('update subcategories set amount = $1 where userid = $2 and category = $3 and subcategory = $4', [amount, userid, category, subcategoryName]));
+      });
+
+    });
+    return Promise.all(arrSQLUpdatePromises);
+  })
+  .then(() => resp.json({message: 'settings saved'}))
+  .catch( err => {
+      console.log('error message: ', err);
+      if (err.message = 'No data returned from the query.'){
+        let errMessage = {message: 'user not authenticated'};
+        resp.status(401);
+        resp.json(errMessage);
+      } else {
+        throw err;
+      }
+  })
+  .catch(next);
+});
 
 
 app.use((err, req, resp, next) => {
