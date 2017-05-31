@@ -638,7 +638,7 @@ app.post('/api/expenseswithlocation', (req, resp, next) => {
   .then(objId => {
 
       let userid = objId.userid;
-      return db.any(`select * from expenses where userid = $1 and address is not null and date > date_trunc('month', current_date) `, [userid] );
+      return db.any(`select * from expenses where userid = $1 and latitude is not null and longitude is not null and date > date_trunc('month', current_date) `, [userid] );
 
   })
   .then((results) => resp.json(results))
