@@ -5,6 +5,7 @@ const pgp = require('pg-promise')();
 const bcrypt = require('bcrypt');
 const uuid = require('uuid');
 const config = require('./config/config.js');
+const axios = require('axios');
 
 const db = pgp(config.db);
 
@@ -495,16 +496,43 @@ app.post('/api/addnewsubcategory', (req, resp, next) => {
 app.post('/api/addnewtransaction', (req, resp, next) => {
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
   .then(objId => {
+
+    return Promise.all([objId, axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: {
+        key: config.googleMapsKey,
+        address: req.body.address
+      }
+    })]);
+  })
+  .then(([objId, geocodingResults]) => {
+
+    // console.log("geocodingresults: ", geocodingResults.data.results);
+    // console.log("geocoding status: ", geocodingResults.data.status);
+    return Promise.all([objId, geocodingResults.data]);
+
+
+  })
+  .then(([objId, geocodingResults]) => {
+    // console.log('gr: ', geocodingResults.results[0]);
+    // console.log("address: ", geocodingResults.results[0].formatted_address);
+    // console.log('gr-1: ', geocodingResults.results[0].geometry);
+    let address = req.body.address;
+    let latitude = null;
+    let longitude = null;
+    if (geocodingResults.status = 'OK'){
+      address = geocodingResults.results[0].formatted_address;
+      longitude = geocodingResults.results[0].geometry.location.lng;
+      latitude = geocodingResults.results[0].geometry.location.lat;
+    }
     let userid = objId.userid;
     let subcategoryid = req.body.subcategoryid;
     let amount = req.body.amount;
     let description = req.body.description;
-    let address = req.body.address;
     let date = req.body.date;
     let type = req.body.type;
 
-    return db.any('insert into expenses (id, amount, subcategory, userid, description, address, date, type ) values (default, $1, $2, $3, $4, $5, $6, $7)',
-                  [amount, subcategoryid, userid, description, address, date, type]);
+    return db.any('insert into expenses (id, amount, subcategory, userid, description, address, date, type, latitude, longitude ) values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                  [amount, subcategoryid, userid, description, address, date, type, latitude, longitude]);
   })
   .then(() => resp.json({message: 'new transaction created'}))
   .catch( err => {
@@ -581,6 +609,36 @@ app.post('/api/subcategorytransactions', (req, resp, next) => {
       let subcategoryid = req.body.subcategoryid;
 
       return db.any(`select * from expenses where userid = $1 and subcategory = $2 and date > date_trunc('month', current_date) `, [userid, subcategoryid, ] );
+
+  })
+  .then((results) => resp.json(results))
+  .catch( err => {
+      console.log('error message: ', err);
+      if (err.message = 'No data returned from the query.'){
+        let errMessage = {message: 'user not authenticated'};
+        resp.status(401);
+        resp.json(errMessage);
+      } else {
+        throw err;
+      }
+  })
+  .catch(next);
+});
+
+
+//====================================================//
+//                                                    //
+//    API for retrieving expenses with location       //
+//                                                    //
+// ===================================================//
+
+app.post('/api/expenseswithlocation', (req, resp, next) => {
+  // console.log("req: ", req.body);
+  db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
+  .then(objId => {
+
+      let userid = objId.userid;
+      return db.any(`select * from expenses where userid = $1 and address is not null and date > date_trunc('month', current_date) `, [userid] );
 
   })
   .then((results) => resp.json(results))
