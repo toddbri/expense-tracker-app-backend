@@ -26,12 +26,12 @@ app.post('/api/user/signup', (req,resp,next) => {
   let password = req.body.password;
 
   let DEFAULT_SUBCATEGORIES = { 1: ['Groceries', 'Restaurants'],
-                                2: ['Electric', 'Gas', 'Water'],
-                                3: ['Rent', 'HOA Dues'],
+                                2: ['Entertainment'],
                                 4: ['Charitable','Church'],
                                 5: ['Gasoline', 'Repairs'],
-                                6: ['Homeowners','Taxes', 'Medical'],
-                                7: ['Mortgage','Automobile','Student']
+                                6: ['Homeowners', 'Medical'],
+                                7: ['Mortgage','Automobile'],
+                                8: ['Electric', 'Gas']
                               };
 
 
