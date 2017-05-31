@@ -147,7 +147,7 @@ app.post('/api/expenses', (req, resp, next) => {
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
   .then(objId => {
 
-    return Promise.all([objId.userid, db.any('select id, category from categories')]);
+    return Promise.all([objId.userid, db.any('select id, category from categories order by id')]);
   })
   .then(([userid, objCategories]) => {  // takes in the userid and an object with all the main categories. Creates a blank Data object with categories and their ids
 
