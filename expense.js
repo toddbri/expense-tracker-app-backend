@@ -494,32 +494,45 @@ app.post('/api/addnewsubcategory', (req, resp, next) => {
 // ===================================================//
 
 app.post('/api/addnewtransaction', (req, resp, next) => {
+  console.log('starting addnewtransaction');
+  console.log('overall body: ', req.body);
   db.one(`select userid FROM tokens WHERE token = $1`, req.body.token) // first see if the user token maps to a user, if not the user is not authenticated
   .then(objId => {
+    console.log('objId: ', objId);
+    console.log('address supplied: ', req.body.location);
+    let tmpAddress = req.body.location.trim();
 
-    return Promise.all([objId, axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
-      params: {
-        key: config.googleMapsKey,
-        address: req.body.address
-      }
-    })]);
+    if (tmpAddress !== null && tmpAddress !== '') {
+      return Promise.all([objId, axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+        params: {
+          key: config.googleMapsKey,
+          address: tmpAddress
+        }
+      })]);
+    }
+    return Promise.all([objId, null]);
   })
   .then(([objId, geocodingResults]) => {
+    if (geocodingResults !== null ){
+      console.log("geocodingresults: ", geocodingResults.data.results);
+      console.log("geocoding status: ", geocodingResults.data.status);
+      return Promise.all([objId, geocodingResults.data]);
+    }
 
-    // console.log("geocodingresults: ", geocodingResults.data.results);
-    // console.log("geocoding status: ", geocodingResults.data.status);
-    return Promise.all([objId, geocodingResults.data]);
-
+    return Promise.all([objId, null]);
 
   })
   .then(([objId, geocodingResults]) => {
-    // console.log('gr: ', geocodingResults.results[0]);
-    // console.log("address: ", geocodingResults.results[0].formatted_address);
-    // console.log('gr-1: ', geocodingResults.results[0].geometry);
-    let address = req.body.address;
+    if (geocodingResults !== null ){
+      console.log('gr: ', geocodingResults.results[0]);
+      console.log("address: ", geocodingResults.results[0].formatted_address);
+      console.log('gr-1: ', geocodingResults.results[0].geometry);
+    }
+
+    let address = req.body.location.trim();
     let latitude = null;
     let longitude = null;
-    if (geocodingResults.status = 'OK'){
+    if ((geocodingResults !== null) &&  (geocodingResults.status = 'OK')){
       address = geocodingResults.results[0].formatted_address;
       longitude = geocodingResults.results[0].geometry.location.lng;
       latitude = geocodingResults.results[0].geometry.location.lat;
