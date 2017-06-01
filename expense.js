@@ -196,14 +196,14 @@ app.post('/api/expenses', (req, resp, next) => {
       });
 
       let nextQuery ='';
-      if (req.body.timeFrame === 'thismonth') {
+      if (req.body.timeFrame === 'prior30days') {
 
             nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
                                 from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
                                 join categories on subcategories.category= categories.id
                                 where users.id = $1 and date >= date_trunc('month', current_date) group by categories.id`, [userid]);
 
-      } else if (req.body.timeFrame === 'prior30days') {
+      } else if (req.body.timeFrame === 'thismonth') {
 
             nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
                                 from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
