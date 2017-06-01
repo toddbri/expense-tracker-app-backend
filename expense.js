@@ -201,14 +201,14 @@ app.post('/api/expenses', (req, resp, next) => {
             nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
                                 from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
                                 join categories on subcategories.category= categories.id
-                                where users.id = $1 and date > date_trunc('month', current_date) group by categories.id`, [userid]);
+                                where users.id = $1 and date >= date_trunc('month', current_date) group by categories.id`, [userid]);
 
       } else if (req.body.timeFrame === 'prior30days') {
 
             nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
                                 from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
                                 join categories on subcategories.category= categories.id
-                                where users.id = $1 and (current_date - date) < 30 group by categories.id`, [userid]);
+                                where users.id = $1 and (current_date - date) =< 30 group by categories.id`, [userid]);
 
       }
       return Promise.all([userid, objData, nextQuery]);
