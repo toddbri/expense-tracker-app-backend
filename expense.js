@@ -363,19 +363,19 @@ app.post('/api/expenses2', (req, resp, next) => {
       // console.log('step3: ', JSON.stringify(objData));
       // console.log('====================');
       let nextQuery ='';
-      if (req.body.timeFrame === 'prior30days') { //the time frames are switched just for the demo day
+      if (req.body.timeFrame === 'thismonth') {
 
             nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
                                 from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
                                 join categories on subcategories.category= categories.id
-                                where users.id = $1 and date > date_trunc('month', current_date) group by categories.id`, [userid]);
+                                where users.id = $1 and date >= date_trunc('month', current_date) group by categories.id`, [userid]);
 
-      } else if (req.body.timeFrame === 'thismonth') {
+      } else if (req.body.timeFrame === 'prior30days') {
 
             nextQuery = db.any(`select categories.id as catid, coalesce(sum(expenses.amount),0) as amount
                                 from expenses left join users on expenses.userid = users.id join subcategories on expenses.subcategory = subcategories.id
                                 join categories on subcategories.category= categories.id
-                                where users.id = $1 and (current_date - date) < 30 group by categories.id`, [userid]);
+                                where users.id = $1 and (current_date - date) =< 30 group by categories.id`, [userid]);
 
       }
       return Promise.all([userid, objData, nextQuery]);
@@ -397,20 +397,20 @@ app.post('/api/expenses2', (req, resp, next) => {
     // console.log("\\\\\\\\\\\\\\\\\\\\");
 
     let nextQuery ='';
-    if (req.body.timeFrame === 'prior30days') { //time frame are switched for demo day
+    if (req.body.timeFrame === 'thismonth') {
 
           nextQuery = db.any(`select subcategories.id as subcatid, coalesce(sum(expenses.amount),0) as amount
                               from expenses left join users on expenses.userid = users.id
                               join subcategories on expenses.subcategory = subcategories.id
-                              where users.id = $1 and date > date_trunc('month', current_date) group by subcategories.id`, [userid]);
+                              where users.id = $1 and date >= date_trunc('month', current_date) group by subcategories.id`, [userid]);
 
 
-    } else if (req.body.timeFrame === 'thismonth') {
+    } else if (req.body.timeFrame === 'prior30days') {
 
           nextQuery = db.any(`select subcategories.id as subcatid, coalesce(sum(expenses.amount),0) as amount
                               from expenses left join users on expenses.userid = users.id
                               join subcategories on expenses.subcategory = subcategories.id
-                              where users.id = $1 and (current_date - date) < 30 group by subcategories.id`, [userid]);
+                              where users.id = $1 and (current_date - date) =< 30 group by subcategories.id`, [userid]);
 
     }
 
@@ -621,7 +621,7 @@ app.post('/api/subcategorytransactions', (req, resp, next) => {
       let subcategoryname = req.body.subcategoryname;
       let subcategoryid = req.body.subcategoryid;
 
-      return db.any(`select * from expenses where userid = $1 and subcategory = $2 and date > date_trunc('month', current_date) `, [userid, subcategoryid, ] );
+      return db.any(`select * from expenses where userid = $1 and subcategory = $2 and date >= date_trunc('month', current_date) `, [userid, subcategoryid, ] );
 
   })
   .then((results) => resp.json(results))
